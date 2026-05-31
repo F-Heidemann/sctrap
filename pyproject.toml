@@ -42,9 +42,9 @@ web  = ["fastapi", "uvicorn[standard]", "gmsh"]
 dev  = ["pytest", "gmsh", "matplotlib"]
 
 [project.urls]
-Homepage = "https://github.com/FrancisHeadley/sctrap"
-Repository = "https://github.com/FrancisHeadley/sctrap"
-Issues = "https://github.com/FrancisHeadley/sctrap/issues"
+Homepage = "https://github.com/F-Heidemann/sctrap"
+Repository = "https://github.com/F-Heidemann/sctrap"
+Issues = "https://github.com/F-Heidemann/sctrap/issues"
 
 [project.scripts]
 sctrap = "sctrap.cli:main"
