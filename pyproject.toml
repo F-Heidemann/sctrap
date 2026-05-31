@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sctrap"
+version = "0.1.0"
+description = "Superconducting trap simulator: trap frequencies of a magnetic dipole levitated above arbitrary SC geometries via scikit-fem."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Francis Headley" }]
+keywords = [
+    "superconductor", "magnetic levitation", "magnetomechanics",
+    "trap frequencies", "finite element", "scikit-fem", "gmsh",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "scikit-fem>=9.0",
+    "numpy",
+    "scipy",
+    "meshio",
+    # v5+ required: the finite-size particle field uses the magpylib-5
+    # `magnetization` (A/m) convention; magpylib 4 interprets the same call
+    # as polarization in mT and would be wrong by ~1e6.
+    "magpylib>=5.0",
+]
+
+[project.optional-dependencies]
+mesh = ["gmsh"]
+plot = ["matplotlib"]
+web  = ["fastapi", "uvicorn[standard]", "gmsh"]
+dev  = ["pytest", "gmsh", "matplotlib"]
+
+[project.urls]
+Homepage = "https://github.com/FrancisHeadley/sctrap"
+Repository = "https://github.com/FrancisHeadley/sctrap"
+Issues = "https://github.com/FrancisHeadley/sctrap/issues"
+
+[project.scripts]
+sctrap = "sctrap.cli:main"
+sctrap-serve = "sctrap.web.app:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sctrap = ["py.typed", "web/static/*", "web/static/**/*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: tests that build a mesh and run a full FEM solve (~30 s)",
+    "benchmark: end-to-end benchmarks against published reference data",
+]

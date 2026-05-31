@@ -1,0 +1,89 @@
+html, body {
+    margin: 0; padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: #f4f4f6;
+    color: #222;
+}
+#app {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    height: 100vh;
+}
+#sidebar {
+    background: #fff;
+    border-right: 1px solid #ddd;
+    padding: 18px 18px 80px 18px;
+    overflow-y: auto;
+    box-shadow: 0 0 8px rgba(0,0,0,0.04);
+}
+#sidebar h1 {
+    margin: 0 0 4px 0; font-size: 18px; font-weight: 600;
+}
+#sidebar h1 .v { color: #888; font-weight: 400; font-size: 12px; margin-left: 6px; }
+#sidebar h2 { margin: 16px 0 8px 0; font-size: 12px; text-transform: uppercase; color: #666; letter-spacing: 0.5px; }
+.field { margin-bottom: 10px; }
+.field label { display: block; font-size: 12px; color: #444; margin-bottom: 3px; }
+.field input[type="number"] {
+    width: 100%; box-sizing: border-box; padding: 5px 6px;
+    border: 1px solid #cccfd3; border-radius: 4px; font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+.field input[type="range"] { width: 100%; }
+.field .row { display: flex; gap: 8px; align-items: center; }
+.field .row .unit { font-size: 11px; color: #888; }
+.field .hint { font-size: 11px; color: #888; margin-top: 2px; }
+.field input.invalid { border-color: #d6604d; background: #fff5f5; }
+button.primary {
+    width: 100%; padding: 8px; font-size: 13px; font-weight: 600;
+    background: #1f6feb; color: white; border: none; border-radius: 4px;
+    cursor: pointer;
+}
+button.primary:hover { background: #1957bf; }
+button.primary:disabled { background: #97afd6; cursor: wait; }
+button.secondary {
+    width: 100%; padding: 6px; font-size: 12px;
+    background: #f0f1f3; color: #222; border: 1px solid #d0d3d8;
+    border-radius: 4px; cursor: pointer; margin-top: 6px;
+}
+button.secondary:hover { background: #e5e7ea; }
+button.secondary:disabled { color: #aaa; cursor: not-allowed; }
+.checkbox-row { display: flex; gap: 6px; align-items: center; font-size: 12px; color: #444; margin-bottom: 8px; }
+#stats {
+    background: #fafbfc; border: 1px solid #eee; border-radius: 4px;
+    padding: 8px 10px; font-size: 12px; line-height: 1.5;
+    font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+#stats .row { display: flex; justify-content: space-between; }
+#stats .row .label { color: #666; }
+#status {
+    margin-top: 8px; font-size: 12px; padding: 6px 8px;
+    border-radius: 4px; min-height: 1.2em;
+}
+#status.idle    { background: #f0f1f3; color: #555; }
+#status.busy    { background: #fff5e0; color: #885600; }
+#status.ok      { background: #e9f6ec; color: #266b39; }
+#status.error   { background: #fdeceb; color: #b3261e; }
+#legend { font-size: 11px; color: #555; margin-top: 8px; }
+#legend .swatch { display: inline-block; width: 11px; height: 11px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+#viewport { position: relative; }
+#canvas { display: block; width: 100%; height: 100%; outline: none; }
+#viewport-overlay {
+    position: absolute; top: 12px; right: 12px;
+    background: rgba(255,255,255,0.85); border: 1px solid #ddd;
+    border-radius: 4px; padding: 6px 9px; font-size: 11px;
+    color: #444; line-height: 1.4;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    pointer-events: none;
+}
+.snippet {
+    margin-top: 6px;
+    background: #2b2d31; color: #e6e6e6;
+    padding: 8px; border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; line-height: 1.4;
+    white-space: pre-wrap; word-break: break-all;
+    max-height: 120px; overflow: auto;
+    display: none;
+}
+.snippet.visible { display: block; }

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # gmsh's manylinux wheel links against system OpenGL/X libraries.
+      - name: Install gmsh system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglu1-mesa libxrender1 libxcursor1 \
+                                  libxft2 libxinerama1
+
+      - name: Install package (with dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Fast test suite
+        run: pytest -q -m "not slow and not benchmark"
