@@ -37,10 +37,16 @@ sctrap simulate --mesh examples/two_plates.msh --subtract-singularity
 
 This loads the mesh, finds the equilibrium position (gravity included via
 `U_mag + m·g·z`), and prints the five trap frequencies (x, y, z, θ, φ) at
-equilibrium. Additional options: `--out results.json` writes the result to
-disk, `--modes` computes the full 5×5 Hessian and normal modes, `--converge`
-adds Richardson uncertainty bands, and `--report DIR/` writes a complete
-PNG/CSV/JSON report.
+equilibrium. The two slow stages (equilibrium search and the 5×5 Hessian)
+show a live progress line with elapsed time and an ETA. Additional options:
+`--out results.json` writes the result to disk, `--modes` computes the full
+5×5 Hessian and normal modes, `--converge` adds Richardson uncertainty bands,
+and `--report DIR/` writes a complete PNG/CSV/JSON report.
+
+A negative mode frequency in the output means that degree of freedom is a
+saddle, not a minimum — usually the in-plane orientation (φ) when the magnet
+is aligned with a non-preferred axis. It indicates the chosen orientation is
+unstable (the magnet would rotate), not a numerical failure.
 
 The `--subtract-singularity` flag is strongly recommended: it is the single
 most important accuracy control, reducing the two-plate off-midplane error

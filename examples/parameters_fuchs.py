@@ -30,13 +30,22 @@ DENSITY_NDFEB        = 7500.0
 DENSITY_BOROSILICATE = 2230.0
 RESCALE_TO_MASS      = 0.43e-6
 
+# Bar in the equatorial plane, along the SHORT (y) horizontal axis.
+# In this anisotropic cavity the short axis is the orientation energy
+# minimum; orienting along the long axis (EQ_PHI = 0) leaves the in-plane
+# libration (phi) unstable -- a saddle, not a minimum -- so that run reports
+# a negative phi-mode frequency. EQ_PHI = pi/2 gives a fully stable spectrum.
+# (This is the short-axis-preference result of the cuboidal-trap analysis.)
 EQ_THETA = np.pi / 2.0
-EQ_PHI   = 0.0
+EQ_PHI   = np.pi / 2.0
 
 TILT_ANGLE = 0.0
 TILT_AXIS  = "y"
 
-MESH_SIZE        = 0.5e-3
+# Finer mesh than the 0.5 mm default: the z-stiffness is a small curvature on
+# a large baseline energy, so it benefits from resolution. 0.3 mm is a good
+# balance (~minutes per run); drop toward 0.2 mm for a convergence check.
+MESH_SIZE        = 0.3e-3
 MESH_SIZE_NEAR   = None
 MESH_REFINE_DIST = None
 

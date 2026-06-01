@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+import time
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
@@ -84,6 +86,7 @@ def find_equilibrium(
     xatol: float = 1e-7,
     maxiter: int = 200,
     verbose: bool = False,
+    progress: bool = False,
     particle=None,
     **solver_kwargs,
 ) -> np.ndarray:
@@ -102,16 +105,24 @@ def find_equilibrium(
     r0_guess = np.asarray(r0_guess, dtype=float).reshape(3)
     g = DEFAULT_GRAVITY if g_vec is None else np.asarray(g_vec, dtype=float).reshape(3)
 
-    n_calls = {"n": 0}
+    n_calls = {"n": 0, "t0": time.time()}
+
+    def _tick(r, u):
+        n_calls["n"] += 1
+        if verbose:
+            print(f"  [{n_calls['n']:3d}] r=({r[0]:.4e},{r[1]:.4e},{r[2]:.4e})  U={u:.6e}",
+                  flush=True)
+        elif progress:
+            sys.stdout.write(
+                f"\r  Equilibrium: eval {n_calls['n']:3d}  "
+                f"z={r[2]*1e3:+.4f} mm  [{time.time()-n_calls['t0']:5.0f}s]   ")
+            sys.stdout.flush()
 
     if particle is None:
         def objective(r):
             u = (U_mag(sctmesh, m_arr, r, **solver_kwargs)
                  + gravity_potential(r, mass, g))
-            n_calls["n"] += 1
-            if verbose:
-                print(f"  [{n_calls['n']:3d}] r=({r[0]:.4e},{r[1]:.4e},{r[2]:.4e})  U={u:.6e}",
-                      flush=True)
+            _tick(r, u)
             return u
     else:
         m_mag = float(np.linalg.norm(m_arr))
@@ -129,14 +140,14 @@ def find_equilibrium(
         def objective(r):
             u = U_total_particle(sctmesh, particle, r,
                                  theta_eq, phi_eq, g_vec=g, **vol_kwargs)
-            n_calls["n"] += 1
-            if verbose:
-                print(f"  [{n_calls['n']:3d}] r=({r[0]:.4e},{r[1]:.4e},{r[2]:.4e})  U={u:.6e}",
-                      flush=True)
+            _tick(r, u)
             return u
 
     res = minimize(objective, r0_guess, method=method,
                    options={"xatol": xatol, "fatol": 1e-22, "maxiter": maxiter})
+    if progress and not verbose:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
     return res.x
 
 

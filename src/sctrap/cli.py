@@ -52,6 +52,7 @@ def cmd_simulate(args: argparse.Namespace) -> int:
         sctmesh, m, r0,
         mass=MAGNET_MASS,
         verbose=args.verbose,
+        progress=not args.verbose,
         **solver_kwargs,
     )
     print(f"  equilibrium r_eq = {eq} m")
@@ -84,6 +85,7 @@ def cmd_simulate(args: argparse.Namespace) -> int:
                 h_trans=args.h_trans, h_ang=args.h_ang,
                 compute_anharmonic=args.anharmonic,
                 verbose=args.verbose,
+                progress=not args.verbose,
                 **solver_kwargs,
             )
         print()

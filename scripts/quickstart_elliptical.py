@@ -211,6 +211,7 @@ def main() -> None:
             mass     = particle.mass,
             g_vec    = g_vec,
             particle = particle,
+            progress = True,
             **volumetric_kw,
         )
     else:
@@ -218,6 +219,7 @@ def main() -> None:
             sct, m_vec, P.EQ_GUESS,
             mass    = particle.mass,
             g_vec   = g_vec,
+            progress = True,
             **solver_kwargs,
         )
     print(f"  r_eq = ({eq_r[0]*1e3:+.4f}, {eq_r[1]*1e3:+.4f}, "
@@ -236,6 +238,7 @@ def main() -> None:
             h_trans  = P.H_TRANS, h_ang = P.H_ANG,
             g_vec    = g_vec,
             particle = particle,
+            progress = True,
             **volumetric_kw,
         )
     else:
@@ -246,6 +249,7 @@ def main() -> None:
             inertia  = particle_inertia_for_modes(particle),
             h_trans  = P.H_TRANS, h_ang = P.H_ANG,
             g_vec    = g_vec,
+            progress = True,
             **solver_kwargs,
         )
     print(f"  ({time.time()-t0:.1f} s)")

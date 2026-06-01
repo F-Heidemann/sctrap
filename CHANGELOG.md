@@ -19,6 +19,24 @@ All notable changes to `sctrap` are documented here. The format follows
   hook in `solve_phi` / `U_mag_particle`.
 - `tests/test_cad_import.py` covering STEP import, unit scaling, and the
   STL / unsupported-format error paths.
+- **Progress indicators** for the two slow steps: `find_equilibrium` and
+  `normal_modes` take a `progress=True` flag and print a single live-updating
+  line (eval count / `solve k/N` with elapsed + ETA). Enabled by default in
+  `quickstart_elliptical.py` and `sctrap simulate` (suppressed under
+  `--verbose`).
+
+### Changed
+- **`examples/parameters_fuchs.py`** now orients the bar along the **short**
+  (y) horizontal axis (`EQ_PHI = π/2`) — the orientation energy minimum — so
+  all five normal modes are stable. With `EQ_PHI = 0` (long axis) the in-plane
+  libration is a saddle and reports a negative phi-mode frequency; that is
+  correct physics (short-axis preference), not a solver failure. The preset
+  mesh is also finer (0.3 mm) for a better-resolved z-stiffness.
+- **`magpylib>=5.0`** is now required (was `>=4.0`). The finite-size particle
+  field relies on the magpylib-5 `magnetization` (A/m) convention; magpylib 4
+  interprets the same call as polarization in mT and would be wrong by ~1e6.
+- **`requires-python>=3.11`** (was `>=3.9`) to match magpylib 5.
+- Added PyPI classifiers, keywords, and project URLs.
 
 ### Fixed
 - **Self-energy ½ (trap frequencies were √2 too high).** The trap potential is
@@ -31,13 +49,6 @@ All notable changes to `sctrap` are documented here. The format follows
   FEniCSx solve shows the Fuchs z-mode is the same for a point dipole and the
   finite bar, so finite magnet extent was **not** the cause of the earlier
   Fuchs discrepancy — the missing ½ was.
-
-### Changed
-- **`magpylib>=5.0`** is now required (was `>=4.0`). The finite-size particle
-  field relies on the magpylib-5 `magnetization` (A/m) convention; magpylib 4
-  interprets the same call as polarization in mT and would be wrong by ~1e6.
-- **`requires-python>=3.11`** (was `>=3.9`) to match magpylib 5.
-- Added PyPI classifiers, keywords, and project URLs.
 
 ### Notes
 - **STL import is not yet supported.** STL is a faceted mesh format and

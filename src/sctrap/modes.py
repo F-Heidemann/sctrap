@@ -24,6 +24,8 @@ Total at default settings: 5*4 + 10*4 + 1 = 61 FEM solves per Hessian.
 
 from __future__ import annotations
 
+import sys
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -159,6 +161,7 @@ def normal_modes(
     compute_anharmonic: bool = False,
     n_diag_pts: int = 5,
     verbose: bool = False,
+    progress: bool = False,
     particle=None,
     **solver_kwargs,
 ) -> NormalModes:
@@ -206,9 +209,25 @@ def normal_modes(
             raise ValueError("inertia must be scalar or 2-element sequence")
     M = np.diag([mass, mass, mass, I_theta, I_phi])
 
+    # Total FEM solves: centre (1) + diagonal (5*2) + off-diagonal (10*4),
+    # plus the anharmonic line scans if requested.
+    total_solves = 1 + 5 * 2 + 10 * 4
+    if compute_anharmonic:
+        total_solves += 5 * n_diag_pts
+    prog = {"k": 0, "t0": time.time()}
+
     def U(q):
-        return _U_at(sctmesh, q, m_mag, mass, g_vec=g_vec,
-                     particle=particle, **solver_kwargs)
+        val = _U_at(sctmesh, q, m_mag, mass, g_vec=g_vec,
+                    particle=particle, **solver_kwargs)
+        if progress:
+            prog["k"] += 1
+            k, el = prog["k"], time.time() - prog["t0"]
+            eta = el / k * (total_solves - k)
+            sys.stdout.write(
+                f"\r  Hessian: solve {k:2d}/{total_solves}  "
+                f"[{el:5.0f}s elapsed, ~{eta:4.0f}s left]   ")
+            sys.stdout.flush()
+        return val
 
     if verbose:
         print(f"  centre U(q0) = ", end="", flush=True)
@@ -274,6 +293,10 @@ def normal_modes(
             diag_anharm[i] = 24.0 * c4   # convention U = ... + (1/24) k4 q^4
             if verbose:
                 print(f"  k4_{DOF_NAMES[i]} = {diag_anharm[i]: .4e}", flush=True)
+
+    if progress:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
     return NormalModes(
         eq_r=eq_r, eq_theta=float(eq_theta), eq_phi=float(eq_phi),
