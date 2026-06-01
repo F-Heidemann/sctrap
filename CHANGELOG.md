@@ -20,6 +20,18 @@ All notable changes to `sctrap` are documented here. The format follows
 - `tests/test_cad_import.py` covering STEP import, unit scaling, and the
   STL / unsupported-format error paths.
 
+### Fixed
+- **Self-energy ½ (trap frequencies were √2 too high).** The trap potential is
+  the image self-energy `U = -½ m·B_induced` (Jackson §2.2); the package
+  previously used the bare `-m·B_induced`, making every stiffness 2× and every
+  trap frequency a factor √2 too high. Applied the ½ in `U_mag`,
+  `_interaction_energy_from_phi`, and the two-plate reference series. After the
+  fix both published benchmarks agree with experiment: Vinante z-mode ≈ 58.8 Hz
+  (vs 56.5, +4 %) and Fuchs z-mode ≈ 25.4 Hz (vs 26.7, −5 %). An independent
+  FEniCSx solve shows the Fuchs z-mode is the same for a point dipole and the
+  finite bar, so finite magnet extent was **not** the cause of the earlier
+  Fuchs discrepancy — the missing ½ was.
+
 ### Changed
 - **`magpylib>=5.0`** is now required (was `>=4.0`). The finite-size particle
   field relies on the magpylib-5 `magnetization` (A/m) convention; magpylib 4

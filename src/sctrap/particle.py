@@ -429,12 +429,15 @@ def _interaction_energy_from_phi(moment: float,
                                  r0: np.ndarray,
                                  theta: float,
                                  phi: float) -> float:
-    """U = -m . B_induced(r0); shared by all volumetric particles."""
+    """U = -1/2 m . B_induced(r0); shared by all volumetric particles.
+
+    The 1/2 is the image self-energy factor (Jackson Sec. 2.2); see `U_mag`.
+    """
     from .dipole import dipole_moment
     from .solver import B_induced_at
     m_vec = dipole_moment(moment, theta, phi)
     B_ind = B_induced_at(phi_sol, np.asarray(r0, dtype=float).reshape(3))
-    return -float(np.dot(m_vec, B_ind))
+    return -0.5 * float(np.dot(m_vec, B_ind))
 
 
 @dataclass

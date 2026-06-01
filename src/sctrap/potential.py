@@ -13,15 +13,19 @@ from .mesh import SCTrapMesh
 
 
 def U_mag(sctmesh: SCTrapMesh, m: np.ndarray, r0: np.ndarray, **kwargs) -> float:
-    """Magnetic interaction energy U_mag = -m . B_induced(r0).
+    """Magnetic trap (self-)energy U_mag = -1/2 m . B_induced(r0).
+
+    The induced field is created *by* the dipole's own image currents, so the
+    trap potential is the image self-energy with the standard factor 1/2
+    (Jackson Sec. 2.2). Omitting it makes every stiffness 2x and every trap
+    frequency a factor sqrt(2) too high.
 
     Solves the Laplace problem once and evaluates the induced field at r0.
-
     Extra kwargs are forwarded to `solve_phi` (e.g. ``element="P1"``).
     """
     phi  = solve_phi(sctmesh, m, r0, **kwargs)
     Bind = B_induced_at(phi, r0)
-    return -float(np.dot(np.asarray(m, dtype=float).reshape(3), Bind))
+    return -0.5 * float(np.dot(np.asarray(m, dtype=float).reshape(3), Bind))
 
 
 DEFAULT_GRAVITY = np.array([0.0, 0.0, -G_GRAV])

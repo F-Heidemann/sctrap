@@ -60,7 +60,8 @@ def U_analytic_two_plates(
     B_total = np.zeros(3)
     for r_im, m_im in images:
         B_total += B_dipole(r0[None, :], m_im, r_im)[0]
-    return -float(np.dot(m, B_total))
+    # Image self-energy (factor 1/2, Jackson Sec. 2.2) to match `U_mag`.
+    return -0.5 * float(np.dot(m, B_total))
 
 
 # ---------------------------------------------------------------------------

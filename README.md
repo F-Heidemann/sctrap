@@ -72,14 +72,11 @@ One command, one parameters file. Two presets ship with the repo:
 ```bash
 # Vinante 2020: closed circular Pb cavity, NdFeB sphere
 python scripts/quickstart_elliptical.py examples/parameters_vinante.py
-# -> z-mode 53.9 Hz  vs paper 56.5 Hz  (-4.6 %)
-# -> beta-mode 423.7 Hz vs paper 377 Hz  (+12.4 %)
+# -> z-mode ~58.8 Hz  vs paper 56.5 Hz  (+4 %)
 
 # Fuchs 2024: closed elliptical Ta cavity, composite (3 cubes + bead) magnet
 python scripts/quickstart_elliptical.py examples/parameters_fuchs.py
-# -> z-mode 43.6 Hz (point-dipole approximation; see Status for the
-#    expected departure from experiment when the magnet is not small
-#    compared to the cavity)
+# -> z-mode ~25.4 Hz  vs paper 26.7 Hz  (-5 %)
 ```
 
 To run your own geometry, copy one of the example preset files, edit the
@@ -242,17 +239,20 @@ examples/
 - **Accuracy** — two-plate sweep, uniform 2 mm P2 mesh + singularity
   subtraction: max 1.96 % across z = ±1.6 mm, <0.1 % near the plates.
   Worst-case error without subtraction was 51 %.
+- **Energy convention** — the trap potential is the image *self-energy*
+  `U = -½ m·B_induced` (Jackson §2.2). The factor ½ is essential: omitting
+  it makes every stiffness 2× and every trap frequency a factor √2 too high.
+  (Earlier versions of this package omitted it.)
 - **Vinante 2020 benchmark** — closed circular Pb cavity + sphere magnet.
-  z-mode 53.9 Hz vs paper 56.5 Hz (-4.6 %); β-mode 423.7 Hz vs 377 Hz
-  (+12.4 %); equilibrium 341 µm vs 311 µm (+9.6 %). For homogeneous
-  spheres the external field is *exactly* a point dipole at the centre,
-  so the point-dipole solver is physically correct here.
-- **Fuchs 2024 benchmark** — closed elliptical Ta cavity + composite
-  (3 cubes + bead) magnet. Within the point-dipole approximation, the
-  predicted z-mode departs from the measured value as expected when
-  the magnet's extent (~0.75 mm bar) is no longer small compared to
-  the cavity (~4.7 mm). Inertia and mass are not the limitation;
-  finite-extent magnetisation support is the next planned improvement.
+  z-mode ≈ 58.8 Hz vs paper 56.5 Hz (+4 %). A homogeneous sphere has an
+  exactly point-dipole external field, so the point-dipole solver is
+  physically exact here.
+- **Fuchs 2024 benchmark** — closed elliptical Ta cavity, 0.75 mm bar.
+  z-mode ≈ 25.4 Hz vs paper 26.7 Hz (−5 %), modelling the bar as a point
+  dipole. An independent FEniCSx solve confirms a point dipole and the
+  finite bar give the same z-mode here to within a few percent, so the
+  finite extent is *not* the limiting approximation for this geometry —
+  the earlier large discrepancy was the missing self-energy ½, now fixed.
 - **Gravity** is included automatically via `gravity_potential`. For
   tilt studies pass a non-default `g_vec = gravity_from_tilt(angle, axis)`
   to `find_equilibrium` and `normal_modes`.
