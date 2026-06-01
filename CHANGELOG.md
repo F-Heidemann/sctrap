@@ -19,19 +19,24 @@ All notable changes to `sctrap` are documented here. The format follows
   hook in `solve_phi` / `U_mag_particle`.
 - `tests/test_cad_import.py` covering STEP import, unit scaling, and the
   STL / unsupported-format error paths.
-- **Progress indicators** for the two slow steps: `find_equilibrium` and
-  `normal_modes` take a `progress=True` flag and print a single live-updating
-  line (eval count / `solve k/N` with elapsed + ETA). Enabled by default in
-  `quickstart_elliptical.py` and `sctrap simulate` (suppressed under
-  `--verbose`).
+- **Progress indicators** for the slow steps: `find_equilibrium`,
+  `find_equilibrium_5d`, and `normal_modes` take a `progress=True` flag and
+  print a single live-updating line (eval count / `solve k/N` with elapsed +
+  ETA). Enabled by default in `quickstart_elliptical.py` and `sctrap simulate`
+  (suppressed under `--verbose`).
 
 ### Changed
-- **`examples/parameters_fuchs.py`** now orients the bar along the **short**
-  (y) horizontal axis (`EQ_PHI = π/2`) — the orientation energy minimum — so
-  all five normal modes are stable. With `EQ_PHI = 0` (long axis) the in-plane
-  libration is a saddle and reports a negative phi-mode frequency; that is
-  correct physics (short-axis preference), not a solver failure. The preset
-  mesh is also finer (0.3 mm) for a better-resolved z-stiffness.
+- **The quickstart now relaxes orientation, not just position.** It uses
+  `find_equilibrium_5d` to jointly minimise over (x, y, z, θ, φ), so the
+  preferred orientation is *found* rather than assumed and the Hessian is
+  taken at a true minimum. For the Fuchs cavity the bar is released from the
+  long axis (`EQ_PHI = 0`) and the solver settles onto the **short** (y) axis
+  — the orientation energy minimum (the short-axis-preference result of the
+  cuboidal analysis) — where all five modes are stable. Set
+  `FIND_ORIENTATION = False` in the parameters file to pin (EQ_THETA, EQ_PHI)
+  instead. The Fuchs preset mesh is also finer (0.3 mm) for a better-resolved
+  z-stiffness. (A negative mode frequency at a *pinned* non-preferred
+  orientation is correct physics — a saddle — not a solver failure.)
 - **`magpylib>=5.0`** is now required (was `>=4.0`). The finite-size particle
   field relies on the magpylib-5 `magnetization` (A/m) convention; magpylib 4
   interprets the same call as polarization in mT and would be wrong by ~1e6.

@@ -43,10 +43,14 @@ show a live progress line with elapsed time and an ETA. Additional options:
 5×5 Hessian and normal modes, `--converge` adds Richardson uncertainty bands,
 and `--report DIR/` writes a complete PNG/CSV/JSON report.
 
-A negative mode frequency in the output means that degree of freedom is a
-saddle, not a minimum — usually the in-plane orientation (φ) when the magnet
-is aligned with a non-preferred axis. It indicates the chosen orientation is
-unstable (the magnet would rotate), not a numerical failure.
+By default `quickstart_elliptical.py` relaxes **orientation as well as
+position** (`find_equilibrium_5d`), so the magnet settles into its preferred
+orientation automatically — in an anisotropic cavity that is the short
+horizontal axis — and the Hessian is taken at a true minimum. Set
+`FIND_ORIENTATION = False` in the parameters file to instead pin
+(`EQ_THETA`, `EQ_PHI`); a negative mode frequency then means that pinned
+orientation is a saddle (the magnet would rotate), which is correct physics,
+not a numerical failure.
 
 The `--subtract-singularity` flag is strongly recommended: it is the single
 most important accuracy control, reducing the two-plate off-midplane error

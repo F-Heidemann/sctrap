@@ -30,14 +30,16 @@ DENSITY_NDFEB        = 7500.0
 DENSITY_BOROSILICATE = 2230.0
 RESCALE_TO_MASS      = 0.43e-6
 
-# Bar in the equatorial plane, along the SHORT (y) horizontal axis.
-# In this anisotropic cavity the short axis is the orientation energy
-# minimum; orienting along the long axis (EQ_PHI = 0) leaves the in-plane
-# libration (phi) unstable -- a saddle, not a minimum -- so that run reports
-# a negative phi-mode frequency. EQ_PHI = pi/2 gives a fully stable spectrum.
-# (This is the short-axis-preference result of the cuboidal-trap analysis.)
-EQ_THETA = np.pi / 2.0
-EQ_PHI   = np.pi / 2.0
+# Orientation is the *initial guess* only. With FIND_ORIENTATION = True the
+# quickstart jointly relaxes position AND orientation (find_equilibrium_5d),
+# so it discovers the preferred orientation rather than assuming it. Starting
+# from the long axis (EQ_PHI = 0), the solver settles onto the SHORT (y) axis
+# -- the orientation energy minimum, the short-axis-preference result of the
+# cuboidal-trap analysis -- and the Hessian there has all five modes stable.
+# Set FIND_ORIENTATION = False to instead pin (EQ_THETA, EQ_PHI).
+EQ_THETA        = np.pi / 2.0
+EQ_PHI          = 0.0
+FIND_ORIENTATION = True
 
 TILT_ANGLE = 0.0
 TILT_AXIS  = "y"

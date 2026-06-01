@@ -50,7 +50,7 @@ def _load_parameters(arg: str | None):
 
 # ---------------------------------------------------------------------------
 from sctrap.dipole import dipole_moment
-from sctrap.frequencies import find_equilibrium
+from sctrap.frequencies import find_equilibrium, find_equilibrium_5d
 from sctrap.generators import elliptical_cavity
 from sctrap.mesh import load_msh
 from sctrap.modes import normal_modes
@@ -203,27 +203,33 @@ def main() -> None:
 
     print(f"  initial guess r0 = ({P.EQ_GUESS[0]*1e3:+.3f}, "
           f"{P.EQ_GUESS[1]*1e3:+.3f}, {P.EQ_GUESS[2]*1e3:+.3f}) mm")
-    m_vec = dipole_moment(particle.moment, P.EQ_THETA, P.EQ_PHI)
+    # By default, jointly relax position AND orientation (find_equilibrium_5d):
+    # in an anisotropic cavity the preferred orientation is found rather than
+    # assumed, so the Hessian is taken at a true minimum (no spurious negative
+    # libration modes). Set FIND_ORIENTATION = False to pin (EQ_THETA, EQ_PHI).
+    find_orientation = bool(getattr(P, "FIND_ORIENTATION", True))
+    eq_kw = dict(particle=particle, **volumetric_kw) if volumetric \
+        else dict(**solver_kwargs)
     t0 = time.time()
-    if volumetric:
-        eq_r = find_equilibrium(
-            sct, m_vec, P.EQ_GUESS,
-            mass     = particle.mass,
-            g_vec    = g_vec,
-            particle = particle,
-            progress = True,
-            **volumetric_kw,
+    if find_orientation:
+        print(f"  orientation guess (theta, phi) = "
+              f"({P.EQ_THETA:+.4f}, {P.EQ_PHI:+.4f}) rad  -> relaxing")
+        eq_r, eq_theta, eq_phi = find_equilibrium_5d(
+            sct, particle.moment, P.EQ_GUESS,
+            theta_guess=P.EQ_THETA, phi_guess=P.EQ_PHI,
+            mass=particle.mass, g_vec=g_vec, progress=True, **eq_kw,
         )
     else:
+        m_vec = dipole_moment(particle.moment, P.EQ_THETA, P.EQ_PHI)
         eq_r = find_equilibrium(
             sct, m_vec, P.EQ_GUESS,
-            mass    = particle.mass,
-            g_vec   = g_vec,
-            progress = True,
-            **solver_kwargs,
+            mass=particle.mass, g_vec=g_vec, progress=True, **eq_kw,
         )
+        eq_theta, eq_phi = float(P.EQ_THETA), float(P.EQ_PHI)
     print(f"  r_eq = ({eq_r[0]*1e3:+.4f}, {eq_r[1]*1e3:+.4f}, "
           f"{eq_r[2]*1e3:+.4f}) mm   ({time.time()-t0:.1f} s)")
+    print(f"  orientation (theta, phi) = ({eq_theta:+.4f}, {eq_phi:+.4f}) rad"
+          + ("   [relaxed]" if find_orientation else "   [pinned]"))
     plot_mesh_overview(sct, out_dir / "mesh.png", eq_r=eq_r)
 
     # ---------------------------------------------------------------- 4
@@ -232,7 +238,7 @@ def main() -> None:
     if volumetric:
         nm = normal_modes(
             sct, eq_r, particle.moment,
-            eq_theta = P.EQ_THETA, eq_phi = P.EQ_PHI,
+            eq_theta = eq_theta, eq_phi = eq_phi,
             mass     = particle.mass,
             inertia  = particle_inertia_for_modes(particle),
             h_trans  = P.H_TRANS, h_ang = P.H_ANG,
@@ -244,7 +250,7 @@ def main() -> None:
     else:
         nm = normal_modes(
             sct, eq_r, particle.moment,
-            eq_theta = P.EQ_THETA, eq_phi = P.EQ_PHI,
+            eq_theta = eq_theta, eq_phi = eq_phi,
             mass     = particle.mass,
             inertia  = particle_inertia_for_modes(particle),
             h_trans  = P.H_TRANS, h_ang = P.H_ANG,
@@ -277,12 +283,12 @@ def main() -> None:
     plot_equilibrium_residual(nm, out_dir / "hessian_card.png")
     print("  + B-field xz slice")
     plot_B_induced_slice(
-        sct, eq_r, P.EQ_THETA, P.EQ_PHI, particle.moment,
+        sct, eq_r, eq_theta, eq_phi, particle.moment,
         out_dir / "B_induced_xz.png",
         span=float(safe_span), n_pts=21, **solver_kwargs)
     print("  + U(x), U(y), U(z) long-range scans")
     long_axes = plot_U_long_axes(
-        sct, eq_r, P.EQ_THETA, P.EQ_PHI, particle.moment, particle.mass,
+        sct, eq_r, eq_theta, eq_phi, particle.moment, particle.mass,
         span=float(safe_span), n_pts=11,
         out_path=out_dir / "U_long_axes.png", **solver_kwargs)
     (out_dir / "U_long_axes.json").write_text(json.dumps(long_axes, indent=2))

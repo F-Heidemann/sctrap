@@ -181,6 +181,7 @@ def find_equilibrium_5d(
     step_pos: float = 50e-6,        # initial simplex step in x, y, z [m]
     step_ang: float = 5e-2,         # initial simplex step in theta, phi [rad]
     verbose: bool = False,
+    progress: bool = False,
     particle=None,
     **solver_kwargs,
 ) -> tuple[np.ndarray, float, float]:
@@ -203,7 +204,19 @@ def find_equilibrium_5d(
     r0 = np.asarray(r0_guess, dtype=float).reshape(3)
     g = DEFAULT_GRAVITY if g_vec is None else np.asarray(g_vec, dtype=float).reshape(3)
 
-    n_calls = {"n": 0}
+    n_calls = {"n": 0, "t0": time.time()}
+
+    def _tick(r, theta, phi, u):
+        n_calls["n"] += 1
+        if verbose:
+            print(f"  [{n_calls['n']:4d}] r=({r[0]:+.3e},{r[1]:+.3e},{r[2]:+.3e}) "
+                  f"theta={theta:+.4f} phi={phi:+.4f}  U={u:.6e}", flush=True)
+        elif progress:
+            sys.stdout.write(
+                f"\r  Equilibrium (5D): eval {n_calls['n']:4d}  "
+                f"z={r[2]*1e3:+.3f} mm  theta={theta:+.3f} phi={phi:+.3f} rad  "
+                f"[{time.time()-n_calls['t0']:5.0f}s]   ")
+            sys.stdout.flush()
 
     if particle is None:
         def objective(q):
@@ -212,11 +225,7 @@ def find_equilibrium_5d(
             m_vec = dipole_moment(m_mag, theta, phi)
             u = (U_mag(sctmesh, m_vec, r, **solver_kwargs)
                  + gravity_potential(r, mass, g))
-            n_calls["n"] += 1
-            if verbose:
-                print(f"  [{n_calls['n']:4d}] r=({r[0]:+.3e},{r[1]:+.3e},{r[2]:+.3e}) "
-                      f"theta={theta:+.4f} phi={phi:+.4f}  U={u:.6e}",
-                      flush=True)
+            _tick(r, theta, phi, u)
             return u
     else:
         vol_kwargs = {k: v for k, v in solver_kwargs.items()
@@ -226,11 +235,7 @@ def find_equilibrium_5d(
             theta, phi = float(q[3]), float(q[4])
             u = U_total_particle(sctmesh, particle, r,
                                  theta, phi, g_vec=g, **vol_kwargs)
-            n_calls["n"] += 1
-            if verbose:
-                print(f"  [{n_calls['n']:4d}] r=({r[0]:+.3e},{r[1]:+.3e},{r[2]:+.3e}) "
-                      f"theta={theta:+.4f} phi={phi:+.4f}  U={u:.6e}",
-                      flush=True)
+            _tick(r, theta, phi, u)
             return u
 
     q0 = np.array([r0[0], r0[1], r0[2],
@@ -250,8 +255,15 @@ def find_equilibrium_5d(
                    options={"xatol": xatol, "fatol": fatol,
                             "maxiter": maxiter,
                             "initial_simplex": simplex})
+    if progress and not verbose:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
     q_eq = res.x
-    return q_eq[:3].copy(), float(q_eq[3]), float(q_eq[4])
+    # Wrap phi into (-pi, pi] for tidy reporting (phi is exactly 2pi-periodic).
+    # Leave theta as the optimiser returned it (folding it would change the
+    # actual moment direction).
+    phi_eq = (float(q_eq[4]) + np.pi) % (2.0 * np.pi) - np.pi
+    return q_eq[:3].copy(), float(q_eq[3]), phi_eq
 
 
 # ---------------------------------------------------------------------------
