@@ -12,37 +12,39 @@ domain with Neumann (`n·∇Φ = -n·B_dipole`) on the superconductor and
 Dirichlet (`Φ = 0`) on the far-field boundary, using `scikit-fem` (pure
 Python, NumPy / SciPy only). No conda, no MPI, no PETSc.
 
-## Install
+## Installation
 
-Requires Python ≥ 3.11.
+`sctrap` requires Python 3.11 or later and installs with `pip` alone — no
+conda, MPI, or PETSc.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-That's it. With the `[mesh]` extra you also get `gmsh`, which lets you
-generate the built-in trap shapes and import CAD files:
+The `[mesh]` extra adds `gmsh`, which is required to generate the built-in
+trap geometries and to import CAD files:
 
 ```bash
 pip install -e ".[mesh]"
 ```
 
-## One-liner
+## Quick start
 
 ```bash
 sctrap simulate --mesh examples/two_plates.msh --subtract-singularity
 ```
 
-This loads the mesh, finds equilibrium (gravity included via `U_mag + m·g·z`),
-and prints the five trap frequencies (x, y, z, θ, φ) at the equilibrium
-point. Add `--out results.json` to dump the result, `--modes` for the
-full 5×5 Hessian + normal modes, `--converge` for Richardson uncertainty
-bands, `--report DIR/` for a full PNG/CSV/JSON report.
+This loads the mesh, finds the equilibrium position (gravity included via
+`U_mag + m·g·z`), and prints the five trap frequencies (x, y, z, θ, φ) at
+equilibrium. Additional options: `--out results.json` writes the result to
+disk, `--modes` computes the full 5×5 Hessian and normal modes, `--converge`
+adds Richardson uncertainty bands, and `--report DIR/` writes a complete
+PNG/CSV/JSON report.
 
-**Always pass `--subtract-singularity`.** It is the single most important
-accuracy flag — drops two-plate off-midplane error from 51 % → 2 % at no
-mesh-refinement cost.
+The `--subtract-singularity` flag is strongly recommended: it is the single
+most important accuracy control, reducing the two-plate off-midplane error
+from 51 % to 2 % at no additional mesh-refinement cost.
 
 ## Mesh studio (browser UI)
 
@@ -53,10 +55,10 @@ pip install -e ".[web]"
 sctrap-serve              # then open http://127.0.0.1:8765
 ```
 
-The page lets you drag cavity dimensions and mesh-resolution knobs and
-re-meshes live (debounced). Click **Download .msh** to save a file the
-rest of the pipeline consumes verbatim, or **Copy parameters.py snippet**
-to paste into your `parameters.py`. The UI runs entirely on `localhost`
+The page exposes the cavity dimensions and mesh-resolution parameters as
+sliders and re-meshes live (debounced). **Download .msh** saves a file the
+rest of the pipeline consumes verbatim, and **Copy parameters.py snippet**
+produces a configuration block for your `parameters.py`. The UI runs entirely on `localhost`
 and ships its own copy of Three.js, so no network is needed once
 installed.
 
