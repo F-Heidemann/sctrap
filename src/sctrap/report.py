@@ -190,7 +190,11 @@ def plot_U_along_dofs(
         d = data[name]
         offsets, h = d["offset"], d["h_stencil"]
         ax = axes[i]
-        ax.plot(offsets, d["U_minus_U0"] * 1e21, "o-", label="U − U₀")
+        # Markers (not a connected line): the single-sample FEM noise-floor
+        # excursions (e.g. the z DOF, where the C0 P2 gradient jumps as an FD
+        # stencil point crosses an element face) then read as scattered points
+        # rather than a spurious V-shaped "kink" in a join-the-dots line.
+        ax.plot(offsets, d["U_minus_U0"] * 1e21, "o", ms=4, label="U − U₀")
         ax.plot(offsets, d["U_parabola"] * 1e21, "--", label="½ H_ii q²")
         # Shade the ±h_stencil window the Hessian (hence the trap frequency)
         # is actually evaluated over. Wiggles OUTSIDE this band are the FEM
