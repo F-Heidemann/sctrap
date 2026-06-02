@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 import numpy as np
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import splu
 
 from skfem import (
     Basis,
@@ -94,6 +94,83 @@ def _stiffness(u, v, w):
 
 
 # ---------------------------------------------------------------------------
+# Prepared (cached) Laplace operator
+# ---------------------------------------------------------------------------
+#
+# The stiffness matrix `A`, the Dirichlet/gauge-pin set `D`, and therefore the
+# sparse factorisation of the condensed system depend ONLY on the mesh and the
+# element — not on the dipole position or moment. Only the Neumann RHS `b`
+# (the surface integral of n.B_dipole) changes between evaluations. An
+# equilibrium search + 5x5 Hessian calls `solve_phi` dozens to hundreds of
+# times on a fixed mesh, so we assemble + factorise once and reuse the
+# factorisation, turning every subsequent solve into a cheap back-substitution.
+# Results are numerically identical to the previous per-call `spsolve` (which
+# is itself SuperLU under the hood); this is a pure performance refactor.
+
+class _PreparedLaplace:
+    """One-time assembly + factorisation of the Laplace operator for a mesh."""
+
+    def __init__(self, sctmesh: SCTrapMesh, element: str, sc_intorder: int):
+        elem = {"P1": ElementTetP1, "P2": ElementTetP2}[element]()
+        mesh = sctmesh.mesh
+
+        self.basis = Basis(mesh, elem)
+        # Surface basis for the Neumann RHS (depends only on mesh + element +
+        # quadrature order, so it is cached alongside the factorisation).
+        self.sc_basis = FacetBasis(mesh, elem, facets=sctmesh.sc_facets,
+                                   intorder=sc_intorder)
+
+        A = asm(_stiffness, self.basis)
+
+        # Dirichlet on the far field, or — for a fully enclosed cavity — pin the
+        # single interior DOF nearest the bbox centre to fix the gauge of Phi
+        # (B_ind = grad(Phi) is gauge-invariant). Both depend only on the mesh.
+        if sctmesh.ff_facets is not None and len(sctmesh.ff_facets) > 0:
+            D = self.basis.get_dofs(facets=sctmesh.ff_facets)
+        else:
+            bbox_lo, bbox_hi = sctmesh.bounding_box()
+            centre = 0.5 * (bbox_lo + bbox_hi)
+            diffs = mesh.p.T - centre
+            i_pin = int(np.argmin((diffs * diffs).sum(axis=1)))
+            D = np.array([i_pin], dtype=np.int64)
+
+        self.N = self.basis.N
+        self.D = D
+        # Condense once (with a dummy RHS) to recover the free-DOF set `I` and
+        # the condensed matrix, then factorise that matrix a single time.
+        dummy = np.zeros(self.N)
+        A_c, _, _, self.I = condense(A, dummy, x=dummy, D=D)
+        self._lu = splu(A_c.tocsc())
+
+    def solve_rhs(self, b: np.ndarray) -> np.ndarray:
+        """Back-solve for the full DOF vector given a Neumann RHS `b`.
+
+        The Dirichlet/pin values are homogeneous (Phi = 0), so the condensed
+        RHS is simply `b` restricted to the free DOFs (no lifting term).
+        """
+        x = np.zeros(self.N)
+        x[self.I] = self._lu.solve(b[self.I])
+        return x
+
+
+def _get_prepared(sctmesh: SCTrapMesh, element: str,
+                  sc_intorder: int) -> _PreparedLaplace:
+    """Return a cached `_PreparedLaplace`, building it once per (mesh, element,
+    intorder). The cache lives on the `SCTrapMesh` instance, so it is shared by
+    every solve in a run and is naturally discarded when the mesh is."""
+    cache = getattr(sctmesh, "_laplace_cache", None)
+    if cache is None:
+        cache = {}
+        sctmesh._laplace_cache = cache
+    key = (element, sc_intorder)
+    prep = cache.get(key)
+    if prep is None:
+        prep = _PreparedLaplace(sctmesh, element, sc_intorder)
+        cache[key] = prep
+    return prep
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -134,17 +211,12 @@ def solve_phi(
             "B_source is incompatible with subtract_singularity=True "
             "(the half-space image construction assumes a point dipole)."
         )
-    elem = {"P1": ElementTetP1, "P2": ElementTetP2}[element]()
-    mesh = sctmesh.mesh
-
-    basis = Basis(mesh, elem)
-
-    # --- Stiffness matrix -------------------------------------------------
-    A = asm(_stiffness, basis)
-
-    # --- Neumann RHS over SC facets --------------------------------------
-    sc_basis = FacetBasis(mesh, elem, facets=sctmesh.sc_facets,
-                          intorder=sc_intorder)
+    # Reuse the per-mesh assembly + factorisation (see _PreparedLaplace). The
+    # stiffness matrix and far-field/gauge condensation are mesh-only, so they
+    # are built once and cached; only the Neumann RHS below depends on (m, r0).
+    prep = _get_prepared(sctmesh, element, sc_intorder)
+    basis = prep.basis
+    sc_basis = prep.sc_basis
 
     m_arr  = np.asarray(m,  dtype=float).reshape(3)
     r0_arr = np.asarray(r0, dtype=float).reshape(3)
@@ -186,27 +258,10 @@ def solve_phi(
 
     b = asm(neumann_rhs, sc_basis)
 
-    # --- Boundary condition ----------------------------------------------
-    # If a far-field facet set exists -> Dirichlet there.
-    # Otherwise (fully enclosed cavity) -> pin one interior DOF to fix the
-    # constant gauge of Phi; B_ind = grad(Phi) is gauge-invariant.
-    if sctmesh.ff_facets is not None and len(sctmesh.ff_facets) > 0:
-        D = basis.get_dofs(facets=sctmesh.ff_facets)
-    else:
-        # Pin one DOF that is far from the SC surface (centre of the bbox).
-        bbox_lo, bbox_hi = sctmesh.bounding_box()
-        centre = 0.5 * (bbox_lo + bbox_hi)
-        # nearest mesh node to bbox centre
-        diffs = mesh.p.T - centre
-        i_pin = int(np.argmin((diffs * diffs).sum(axis=1)))
-        D = np.array([i_pin], dtype=np.int64)
-
-    x = np.zeros_like(b)                      # initial guess (BC values stored here)
-    A_c, b_c, x_c, I = condense(A, b, x=x, D=D)
-
-    # Sparse direct solve (sufficient up to ~few-hundred-thousand DOFs).
-    x_free = spsolve(A_c, b_c)
-    x[I] = x_free
+    # Back-substitute against the cached factorisation. The boundary condition
+    # (far-field Dirichlet or single-DOF gauge pin) is baked into `prep` and is
+    # homogeneous, so this reproduces the previous condense + spsolve exactly.
+    x = prep.solve_rhs(b)
 
     return PhiSolution(coeffs=x, basis=basis, image_source=image_source)
 

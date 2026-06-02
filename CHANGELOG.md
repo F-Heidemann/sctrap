@@ -26,6 +26,18 @@ All notable changes to `sctrap` are documented here. The format follows
   (suppressed under `--verbose`).
 
 ### Changed
+- **Cached Laplace factorisation — every command is faster (≈5× and rising
+  with mesh size).** The stiffness matrix, the far-field/gauge condensation,
+  and therefore the sparse LU factorisation depend only on the mesh, not on the
+  dipole position or moment; only the Neumann RHS changes between evaluations.
+  `solve_phi` now assembles and factorises **once per mesh** (`_PreparedLaplace`,
+  cached on the `SCTrapMesh`) and back-substitutes each call. An equilibrium
+  search + 5×5 Hessian calls the solver dozens–hundreds of times on a fixed
+  mesh, so this removes the dominant repeated cost. Measured 5× on a 7.3 k-DOF
+  cavity; larger on finer meshes (factorisation scales super-linearly, the
+  back-solve does not). Results are **numerically identical** to the previous
+  per-call `spsolve` (machine-precision agreement; SuperLU under the hood
+  either way) — a pure performance refactor, no accuracy trade-off.
 - **The quickstart now relaxes orientation, not just position.** It uses
   `find_equilibrium_5d` to jointly minimise over (x, y, z, θ, φ), so the
   preferred orientation is *found* rather than assumed and the Hessian is
