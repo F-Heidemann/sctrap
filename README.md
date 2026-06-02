@@ -99,6 +99,15 @@ only), `mode_shapes.png`, `frequencies.png`, `hessian_card.png`,
 `U_along_DOFs.png`, `U_xz_slice.png`, `U_xy_slice.png`,
 `B_induced_xz.png`, `U_long_axes.png`.
 
+The **raw numbers** behind the potential-scan plot are written as CSV (SI
+units) so you can re-plot and fit them yourself: `U_along_DOFs/U_x.csv` …
+`U_along_DOFs/U_phi.csv` (one per DOF: `offset`, `U`, `U − U₀`, and the
+harmonic-fit `½ H_ii q²` column), plus a combined `U_along_DOFs.csv`. The
+per-mode eigenvectors and frequencies are in `modes.csv`, and `U_long_axes.json`
+holds the long-range line scans. Each `U_along_DOFs` panel shades the ±h window
+the Hessian (hence the trap frequency) is evaluated over; structure outside that
+band is the FEM noise floor (see Status), not physical anharmonicity.
+
 ### Tilt sweep
 
 ```bash

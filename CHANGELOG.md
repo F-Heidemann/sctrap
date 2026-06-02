@@ -7,7 +7,16 @@ All notable changes to `sctrap` are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- **CAD import** (`sctrap.generators.import_cad`, CLI `sctrap mesh import`):
+- **Per-DOF potential-scan data export.** The report now writes the raw numbers
+  behind the `U_along_DOFs` plot as CSV (SI units) into a `U_along_DOFs/`
+  directory: one file per DOF (`U_x.csv` … `U_phi.csv`, columns `offset`, `U`,
+  `U − U₀`, harmonic-fit `½ H_ii q²`) plus a combined `U_along_DOFs.csv`, each
+  with a header recording `H_ii` and the Hessian half-width `h`. Experimentalists
+  can load and re-plot/fit these directly. New public helpers
+  `report.compute_U_along_dofs` / `report.write_U_along_dofs_data`;
+  `plot_U_along_dofs` now returns the data dict and takes `write_data=True`. The
+  plot also shades the ±h window the trap frequency is fit over, so the
+  noise-floor structure beyond it is visibly out of scope.
   load a STEP/IGES/BREP solid as the superconductor, auto-wrap a far-field
   sphere, and write a meshed `SC`/`FF`/`air` trap geometry that the rest of
   the pipeline consumes verbatim. A `--scale` option converts CAD units
@@ -83,6 +92,11 @@ All notable changes to `sctrap` are documented here. The format follows
 - Added PyPI classifiers, keywords, and project URLs.
 
 ### Fixed
+- **Mesh overview plot was blank.** `plot_mesh_overview` built the SC/FF facet
+  polygons in metres but drew them inside millimetre axes (the vertex scatter,
+  `r_eq` marker, and axis limits are all ×1e3), collapsing the whole shell onto
+  the origin so only the axes and `r_eq` rendered. Facet vertices are now scaled
+  to mm and the cavity surface draws correctly.
 - **Self-energy ½ (trap frequencies were √2 too high).** The trap potential is
   the image self-energy `U = -½ m·B_induced` (Jackson §2.2); the package
   previously used the bare `-m·B_induced`, making every stiffness 2× and every

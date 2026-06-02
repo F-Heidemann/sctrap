@@ -68,7 +68,12 @@ def plot_mesh_overview(sctmesh: SCTrapMesh, out_path: Path,
         if len(idx) > 4000:
             idx = np.random.default_rng(0).choice(idx, 4000, replace=False)
         tri = facets[:, idx]                           # (3, k)
-        verts = p[:, tri]                              # (3, 3, k)
+        # Coordinates in millimetres to match the axes limits, the vertex
+        # scatter, and the r_eq marker (all scaled by 1e3 below). Without this
+        # the facet polygons were drawn at metre-scale (~1e-3) inside a
+        # millimetre axis range, collapsing the whole SC shell onto the origin
+        # and rendering the mesh plot blank.
+        verts = p[:, tri] * 1e3                         # (3, 3, k) [mm]
         verts = np.transpose(verts, (2, 1, 0))         # (k, 3 verts, 3 xyz)
         from mpl_toolkits.mplot3d.art3d import Poly3DCollection
         coll = Poly3DCollection(verts, alpha=alpha, facecolor=color,

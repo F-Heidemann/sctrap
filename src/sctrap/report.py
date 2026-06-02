@@ -6,6 +6,8 @@ Layout written to `out_dir`:
     modes.csv          one row per mode (rank, label, f_Hz, eigenvector, ...)
     summary.txt        human-readable summary (`str(NormalModes)`)
     U_along_DOFs.png   5-panel U(q) scan around equilibrium with parabola overlay
+    U_along_DOFs/      per-DOF raw scan data as CSV (U_x.csv … U_phi.csv +
+                       combined U_along_DOFs.csv), SI units, for re-plotting
     U_xz_slice.png     2-D U(x, z) contour at y = y_eq
     U_xy_slice.png     2-D U(x, y) contour at z = z_eq
     mode_shapes.png    bar chart of |v_i|^2 per mode
@@ -78,6 +80,86 @@ def _try_matplotlib():
         return None
 
 
+#: SI unit of each DOF's scan offset, for the exported data headers.
+_DOF_OFFSET_UNIT = {"x": "m", "y": "m", "z": "m",
+                    "theta": "rad", "phi": "rad"}
+
+
+def compute_U_along_dofs(
+    sctmesh: SCTrapMesh,
+    modes: NormalModes,
+    m_mag: float,
+    n_pts: int = 21,
+    span_factor: float = 4.0,
+    mass: float = MAGNET_MASS,
+    **solver_kwargs,
+) -> dict:
+    """Scan the total potential U(q) along each of the five DOFs about the
+    equilibrium, one DOF varied at a time (the others held at equilibrium).
+
+    Returns a dict keyed by DOF name (``x, y, z, theta, phi``); each value is a
+    dict with arrays ``offset`` (δq, SI: m or rad), ``U`` (absolute total
+    potential [J]), ``U_minus_U0`` [J], and ``U_parabola`` (the harmonic fit
+    ½·H_ii·δq² [J] used for the trap frequency), plus scalars ``H_ii`` [SI],
+    ``h_stencil`` (the Hessian half-width [SI]) and ``unit``. This is the raw
+    data behind the ``U_along_DOFs`` plot; it is written to CSV so users can
+    re-plot and fit it themselves.
+    """
+    h_vec = np.array([modes.h_trans] * 3 + [modes.h_ang] * 2)
+    q0 = np.array([*modes.eq_r, modes.eq_theta, modes.eq_phi])
+
+    data: dict = {}
+    for i, name in enumerate(DOF_NAMES):
+        offsets = np.linspace(-span_factor, span_factor, n_pts) * h_vec[i]
+        U = np.empty(n_pts)
+        for k, dq in enumerate(offsets):
+            q = q0.copy(); q[i] += dq
+            r0 = q[:3]
+            m_vec = dipole_moment(m_mag, q[3], q[4])
+            U[k] = (U_mag(sctmesh, m_vec, r0, **solver_kwargs)
+                    + mass * G_GRAV * float(r0[2]))
+        data[name] = {
+            "offset": offsets,
+            "U": U,
+            "U_minus_U0": U - modes.U0,
+            "U_parabola": 0.5 * modes.H[i, i] * offsets ** 2,
+            "H_ii": float(modes.H[i, i]),
+            "h_stencil": float(h_vec[i]),
+            "unit": _DOF_OFFSET_UNIT[name],
+        }
+    return data
+
+
+def write_U_along_dofs_data(data: dict, out_dir: Path) -> None:
+    """Write one CSV per DOF (``U_x.csv`` … ``U_phi.csv``) plus a combined
+    ``U_along_DOFs.csv`` into ``out_dir``. All columns are SI so experimentalists
+    can load and analyse them with no unit conversion. The per-DOF parabola
+    column is the harmonic fit that defines the trap frequency; deviations of
+    ``U_minus_U0`` from it beyond ±``h_stencil`` are the FEM noise floor
+    (see the package docs), not physical anharmonicity."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    combined_rows = []
+    for name, d in data.items():
+        unit = d["unit"]
+        header = [f"offset[{unit}]", "U[J]", "U_minus_U0[J]", "U_parabola[J]"]
+        with (out_dir / f"U_{name}.csv").open("w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow([f"# DOF={name}  H_ii={d['H_ii']:.8e}  "
+                        f"h_stencil={d['h_stencil']:.8e} {unit}"])
+            w.writerow(header)
+            for o, u, du, up in zip(d["offset"], d["U"],
+                                    d["U_minus_U0"], d["U_parabola"]):
+                row = [o, u, du, up]
+                w.writerow(row)
+                combined_rows.append([name, unit, o, u, du, up])
+
+    with (out_dir / "U_along_DOFs.csv").open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["dof", "offset_unit", "offset", "U_J",
+                    "U_minus_U0_J", "U_parabola_J"])
+        w.writerows(combined_rows)
+
+
 def plot_U_along_dofs(
     sctmesh: SCTrapMesh,
     modes: NormalModes,
@@ -86,40 +168,47 @@ def plot_U_along_dofs(
     n_pts: int = 21,
     span_factor: float = 4.0,
     mass: float = MAGNET_MASS,
+    write_data: bool = True,
     **solver_kwargs,
-) -> None:
-    """5-panel U(q) scan with parabola overlay using H[i,i] from the Hessian."""
+) -> dict:
+    """5-panel U(q) scan with the harmonic (½ H_ii q²) overlay, and — unless
+    ``write_data=False`` — the underlying per-DOF data dumped as CSV into a
+    ``<out_path stem>/`` sibling directory. Returns the data dict."""
+    data = compute_U_along_dofs(
+        sctmesh, modes, m_mag, n_pts=n_pts,
+        span_factor=span_factor, mass=mass, **solver_kwargs)
+
+    if write_data:
+        write_U_along_dofs_data(data, out_path.parent / out_path.stem)
+
     plt = _try_matplotlib()
     if plt is None:
-        return
+        return data
 
-    h_vec = np.array([modes.h_trans] * 3 + [modes.h_ang] * 2)
-    half = span_factor   # number of stencil half-widths to either side
     fig, axes = plt.subplots(1, 5, figsize=(20, 4))
-    q0 = np.array([*modes.eq_r, modes.eq_theta, modes.eq_phi])
-
     for i, name in enumerate(DOF_NAMES):
-        offsets = np.linspace(-half, half, n_pts) * h_vec[i]
-        U = np.empty(n_pts)
-        for k, dq in enumerate(offsets):
-            q = q0.copy(); q[i] += dq
-            r0 = q[:3]
-            m_vec = dipole_moment(m_mag, q[3], q[4])
-            U[k] = (U_mag(sctmesh, m_vec, r0, **solver_kwargs)
-                    + mass * G_GRAV * float(r0[2]))
+        d = data[name]
+        offsets, h = d["offset"], d["h_stencil"]
         ax = axes[i]
-        ax.plot(offsets, (U - modes.U0) * 1e21, "o-", label="U − U₀")
-        # Parabola from H_ii
-        Up = 0.5 * modes.H[i, i] * offsets ** 2
-        ax.plot(offsets, Up * 1e21, "--", label="½ H_ii q²")
-        ax.set_xlabel(f"δ{name}")
+        ax.plot(offsets, d["U_minus_U0"] * 1e21, "o-", label="U − U₀")
+        ax.plot(offsets, d["U_parabola"] * 1e21, "--", label="½ H_ii q²")
+        # Shade the ±h_stencil window the Hessian (hence the trap frequency)
+        # is actually evaluated over. Wiggles OUTSIDE this band are the FEM
+        # noise floor and do not enter the frequencies.
+        ax.axvspan(-h, h, color="0.6", alpha=0.15,
+                   label="Hessian window (±h)")
+        ax.set_xlabel(f"δ{name}  [{d['unit']}]")
         ax.set_ylabel("U − U₀  [zJ]")
         ax.set_title(name)
         ax.legend(fontsize=8)
         ax.grid(alpha=0.3)
-    fig.tight_layout()
+    fig.suptitle("U along each DOF about equilibrium.  The trap frequency uses "
+                 "only the shaded ±h window; structure beyond it is FEM "
+                 "noise-floor, not physical.", fontsize=9)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
+    return data
 
 
 def plot_potential_slice(
