@@ -175,9 +175,11 @@ def find_equilibrium_5d(
     *,
     mass: float = MAGNET_MASS,
     g_vec: np.ndarray | None = None,
-    xatol: float = 1e-7,
-    fatol: float = 1e-22,
-    maxiter: int = 500,
+    xatol: float = 1e9,             # simplex tol in SCALED coords; large =>
+                                    # disabled, so fatol alone governs (below)
+    fatol: float | None = None,     # energy tol [J]; None -> ftol_rel * |U0|
+    ftol_rel: float = 1e-4,         # relative energy tol when fatol is None
+    maxiter: int = 300,
     step_pos: float = 50e-6,        # initial simplex step in x, y, z [m]
     step_ang: float = 5e-2,         # initial simplex step in theta, phi [rad]
     verbose: bool = False,
@@ -241,24 +243,66 @@ def find_equilibrium_5d(
     q0 = np.array([r0[0], r0[1], r0[2],
                    float(theta_guess), float(phi_guess)])
 
-    # Hand-build an initial simplex (n+1 = 6 vertices in 5D) so position and
-    # orientation steps are comparable in objective-value sensitivity.
-    dq = np.array([step_pos, step_pos, step_pos, step_ang, step_ang])
+    # Non-dimensionalise: position (~1e-3 m) and orientation (~1 rad) live in
+    # one vector, so they need comparable simplex steps. Rescale each DOF by its
+    # natural step so the optimiser sees an isotropic O(1) problem (this only
+    # shapes the initial simplex; `xatol` is disabled below).
+    #
+    # Convergence is governed by `fatol` ALONE (xatol defaulted huge). Reason:
+    # the objective is noise-limited (floor ~1e-12 J here). A simplex-size
+    # (`xatol`) criterion would demand the simplex shrink far below the size at
+    # which the energy spread already hit the noise floor -- i.e. shrink into
+    # the noise -- so it can never be met and the search grinds to `maxiter`.
+    # Stopping on `fatol` (a few x the floor) halts exactly when the simplex can
+    # no longer distinguish energies, which is the best achievable resolution
+    # and auto-tightens on finer meshes (lower floor -> lower |U0|-relative
+    # fatol -> smaller terminal simplex). The off-centre equilibrium error this
+    # leaves (~10 um / ~1 deg) does NOT bias the trap frequencies: those come
+    # from a symmetric 2nd-difference Hessian, which cancels the linear term.
+    scale = np.array([step_pos, step_pos, step_pos, step_ang, step_ang])
+
+    def objective_scaled(y):
+        return objective(y * scale)
+
+    y0 = q0 / scale
+
+    # Energy tolerance. The historical default `fatol = 1e-22` is ~1e3x below
+    # the FEM objective's own numerical floor (measured relative floor ~4e-5 for
+    # the singularity-subtracted point-dipole solve: the nearest-facet image
+    # reflection jumps discretely as the dipole moves), so the f-test never
+    # passes and the search runs to `maxiter` long after physical convergence.
+    # Tie it to the objective magnitude with `ftol_rel` safely *above* that
+    # relative floor. This is mesh-robust because the floor is ~constant in
+    # relative terms (a finer mesh lowers the absolute floor but not the ratio),
+    # so no per-mesh noise characterisation is needed. Pinning the equilibrium
+    # tighter than the floor buys nothing: the trap frequencies come from the
+    # Hessian over a ~tens-of-microns window, not from the equilibrium position.
+    if fatol is not None:
+        fatol_eff = fatol
+    else:
+        u0 = abs(float(objective_scaled(y0)))   # one extra eval (fallback only)
+        fatol_eff = max(ftol_rel * u0, 1e-30)
+    if progress or verbose:
+        print(f"  Equilibrium (5D): fatol = {fatol_eff:.2e} J"
+              + (f" (ftol_rel={ftol_rel:.0e} x |U0|)" if fatol is None else ""),
+              flush=True)
+
+    # Initial simplex (n+1 = 6 vertices in 5D): unit step along each scaled DOF.
     simplex = np.empty((6, 5))
-    simplex[0] = q0
+    simplex[0] = y0
     for i in range(5):
-        v = q0.copy()
-        v[i] += dq[i]
+        v = y0.copy()
+        v[i] += 1.0
         simplex[i + 1] = v
 
-    res = minimize(objective, q0, method="Nelder-Mead",
-                   options={"xatol": xatol, "fatol": fatol,
+    res = minimize(objective_scaled, y0, method="Nelder-Mead",
+                   options={"xatol": xatol, "fatol": fatol_eff,
                             "maxiter": maxiter,
                             "initial_simplex": simplex})
     if progress and not verbose:
         sys.stdout.write("\n")
         sys.stdout.flush()
-    q_eq = res.x
+    q_eq = res.x * scale
     # Wrap phi into (-pi, pi] for tidy reporting (phi is exactly 2pi-periodic).
     # Leave theta as the optimiser returned it (folding it would change the
     # actual moment direction).

@@ -137,3 +137,54 @@ def B_halfspace_image(
                           np.asarray(plane_point, dtype=float).reshape(3), n)
     m_im  = reflect_moment(np.asarray(m, dtype=float).reshape(3), n)
     return B_dipole(points, m_im, r0_im)
+
+
+# ---------------------------------------------------------------------------
+# Analytic levitation height (single image dipole)
+# ---------------------------------------------------------------------------
+
+MU0 = 4.0e-7 * np.pi
+
+
+def image_equilibrium_height(
+    m_mag: float,
+    theta: float,
+    mass: float,
+    g: float = 9.80665,
+) -> float:
+    """Analytic levitation height above a flat SC plane (single image dipole).
+
+    Balances gravity against the repulsion from the dipole's own mirror image
+    in a superconducting half-space — the leading-order picture of Vinante et
+    al., *Levitated Micromagnets in Superconducting Traps*. A dipole ``m`` at
+    height ``z`` above the plane has an image at ``-z`` with the normal moment
+    component flipped (``reflect_moment``); the resulting upward force is
+
+        F_z = 3 mu0 (m_perp^2 + 2 m_z^2) / (64 pi z^4),
+
+    where ``m_z = m cos(theta)`` is the component normal to the plane and
+    ``m_perp = m sin(theta)`` the in-plane part. Setting ``F_z = M g`` gives
+
+        z_eq = [ 3 mu0 (m_perp^2 + 2 m_z^2) / (64 pi M g) ]^(1/4).
+
+    This is only an approximation for a finite cavity (it ignores the ceiling
+    and side walls), but it is a cheap, closed-form seed for the equilibrium
+    optimiser — orders of magnitude faster than letting Nelder-Mead discover
+    the levitation height from scratch.
+
+    Parameters
+    ----------
+    m_mag : |m| [A m^2]
+    theta : polar angle of the moment from the plane normal (+z) [rad]
+    mass  : magnet mass [kg]
+    g     : gravitational acceleration magnitude [m s^-2]
+
+    Returns
+    -------
+    z_eq : approximate levitation height above the plane [m]
+    """
+    m_z2 = (m_mag * np.cos(theta)) ** 2
+    m_perp2 = (m_mag * np.sin(theta)) ** 2
+    numerator = 3.0 * MU0 * (m_perp2 + 2.0 * m_z2)
+    denominator = 64.0 * np.pi * mass * g
+    return float((numerator / denominator) ** 0.25)

@@ -32,22 +32,26 @@ RESCALE_TO_MASS      = 0.43e-6
 
 # Orientation is the *initial guess* only. With FIND_ORIENTATION = True the
 # quickstart jointly relaxes position AND orientation (find_equilibrium_5d),
-# so it discovers the preferred orientation rather than assuming it. Starting
-# from the long axis (EQ_PHI = 0), the solver settles onto the SHORT (y) axis
-# -- the orientation energy minimum, the short-axis-preference result of the
-# cuboidal-trap analysis -- and the Hessian there has all five modes stable.
+# so it discovers the preferred orientation rather than assuming it. The
+# orientation energy minimum is the SHORT (y) axis (EQ_PHI = pi/2) -- the
+# short-axis-preference result of the cuboidal-trap analysis, where the Hessian
+# has all five modes stable. We seed the guess there so the solver starts at
+# the equilibrium instead of walking in from the long axis (which is slow).
+# Short axis is the recommended starting guess for 3D elliptical cavities.
 # Set FIND_ORIENTATION = False to instead pin (EQ_THETA, EQ_PHI).
 EQ_THETA        = np.pi / 2.0
-EQ_PHI          = 0.0
+EQ_PHI          = np.pi / 2.0
 FIND_ORIENTATION = True
 
 TILT_ANGLE = 0.0
 TILT_AXIS  = "y"
 
 # Finer mesh than the 0.5 mm default: the z-stiffness is a small curvature on
-# a large baseline energy, so it benefits from resolution. 0.3 mm is a good
-# balance (~minutes per run); drop toward 0.2 mm for a convergence check.
-MESH_SIZE        = 0.3e-3
+# a large baseline energy, so it benefits from resolution. 0.2 mm lowers the
+# FEM noise floor (more accurate stiffness) at ~3x the per-solve cost of
+# 0.3 mm; affordable now that the equilibrium optimiser stops at the noise
+# floor instead of grinding to maxiter. Use 0.3 mm for a quicker, coarser run.
+MESH_SIZE        = 0.2e-3
 MESH_SIZE_NEAR   = None
 MESH_REFINE_DIST = None
 

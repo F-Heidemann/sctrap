@@ -49,9 +49,11 @@ def _load_parameters(arg: str | None):
 
 
 # ---------------------------------------------------------------------------
+from sctrap.analytic_box import analytic_box_estimate
 from sctrap.dipole import dipole_moment
 from sctrap.frequencies import find_equilibrium, find_equilibrium_5d
 from sctrap.generators import elliptical_cavity
+from sctrap.half_space import image_equilibrium_height
 from sctrap.mesh import load_msh
 from sctrap.modes import normal_modes
 from sctrap.particle import (
@@ -201,8 +203,56 @@ def main() -> None:
     # volumetric path silently drops it (the kwarg is incompatible there).
     volumetric_kw = dict(element=P.ELEMENT)
 
-    print(f"  initial guess r0 = ({P.EQ_GUESS[0]*1e3:+.3f}, "
-          f"{P.EQ_GUESS[1]*1e3:+.3f}, {P.EQ_GUESS[2]*1e3:+.3f}) mm")
+    # Analytic seed + benchmark from the cuboidal image-lattice model.
+    # Approximating the elliptical bore by the rectangular box [-a,a]x[-b,b]x
+    # [0,H] gives, in closed form, the equilibrium height AND the full diagonal
+    # Hessian (k_x,k_y,k_z, k_theta,k_phi) -> all five mode frequencies. We use
+    # it to (a) seed z_eq so the FEM optimiser starts at the minimum, and (b)
+    # print an independent benchmark for the FEM frequencies that follow.
+    #
+    # The optimiser's energy tolerance (fatol) is handled separately, inside
+    # find_equilibrium_5d, as ftol_rel * |U0| with ftol_rel safely above the
+    # FEM objective's relative noise floor (~4e-5 for the singularity-subtracted
+    # solve). We deliberately do NOT match fatol to the analytic curvature: that
+    # scale (~1e-15 J for a 0.2 um target) sits ~1000x below the noise floor, so
+    # the f-test could never be met and the search would grind to maxiter. The
+    # floor caps the achievable equilibrium resolution at ~10 um regardless --
+    # which is fine, since the frequencies come from the Hessian window, not the
+    # equilibrium position. Set AUTO_Z_GUESS = False to keep the hand-set
+    # EQ_GUESS[2].
+    g_mag = float(np.linalg.norm(g_vec))
+    r0_guess = np.asarray(P.EQ_GUESS, dtype=float).copy()
+    have_box = all(hasattr(P, k) for k in ("CAVITY_A", "CAVITY_B", "CAVITY_HEIGHT"))
+    if have_box:
+        est = analytic_box_estimate(
+            P.CAVITY_A, P.CAVITY_B, P.CAVITY_HEIGHT,
+            particle.moment, particle.mass,
+            theta0=P.EQ_THETA, phi0=P.EQ_PHI, g=g_mag,
+            I_theta=particle.inertia_yy, I_phi=particle.inertia_zz,
+        )
+        print("  analytic box estimate (cuboidal image lattice) [benchmark]:")
+        print(f"    z_eq = {est['z_eq']*1e3:.4f} mm    "
+              f"k = (x {est['k_x']*1e3:.3f}, y {est['k_y']*1e3:.3f}, "
+              f"z {est['k_z']*1e3:.3f}) mN/m")
+        print(f"    f_x={est['f_x']:.2f}  f_y={est['f_y']:.2f}  "
+              f"f_z={est['f_z']:.2f} Hz   |   "
+              f"k_theta={est['k_theta']*1e9:.3f}  k_phi={est['k_phi']*1e9:.3f} nJ/rad^2"
+              + (f"  (f_theta={est['f_theta']:.2f}  f_phi={est['f_phi']:.2f} Hz)"
+                 if est['f_theta'] and est['f_phi'] else ""))
+        if bool(getattr(P, "AUTO_Z_GUESS", True)):
+            r0_guess[2] = est["z_eq"]
+    elif bool(getattr(P, "AUTO_Z_GUESS", True)):
+        # No cuboidal dims: fall back to the single-image half-space height.
+        z_above_floor = image_equilibrium_height(
+            particle.moment, P.EQ_THETA, particle.mass, g=g_mag)
+        sc_centroids_z = sct.mesh.p[2, sct.mesh.facets[:, sct.sc_facets]].mean(axis=0)
+        floor_z = float(sc_centroids_z.min())
+        r0_guess[2] = floor_z + z_above_floor
+        print(f"  analytic z_eq (image dipole) = {z_above_floor*1e3:+.3f} mm "
+              f"above floor (z={floor_z*1e3:+.3f} mm)")
+
+    print(f"  initial guess r0 = ({r0_guess[0]*1e3:+.3f}, "
+          f"{r0_guess[1]*1e3:+.3f}, {r0_guess[2]*1e3:+.3f}) mm")
     # By default, jointly relax position AND orientation (find_equilibrium_5d):
     # in an anisotropic cavity the preferred orientation is found rather than
     # assumed, so the Hessian is taken at a true minimum (no spurious negative
@@ -215,14 +265,15 @@ def main() -> None:
         print(f"  orientation guess (theta, phi) = "
               f"({P.EQ_THETA:+.4f}, {P.EQ_PHI:+.4f}) rad  -> relaxing")
         eq_r, eq_theta, eq_phi = find_equilibrium_5d(
-            sct, particle.moment, P.EQ_GUESS,
+            sct, particle.moment, r0_guess,
             theta_guess=P.EQ_THETA, phi_guess=P.EQ_PHI,
-            mass=particle.mass, g_vec=g_vec, progress=True, **eq_kw,
+            mass=particle.mass, g_vec=g_vec,
+            progress=True, **eq_kw,
         )
     else:
         m_vec = dipole_moment(particle.moment, P.EQ_THETA, P.EQ_PHI)
         eq_r = find_equilibrium(
-            sct, m_vec, P.EQ_GUESS,
+            sct, m_vec, r0_guess,
             mass=particle.mass, g_vec=g_vec, progress=True, **eq_kw,
         )
         eq_theta, eq_phi = float(P.EQ_THETA), float(P.EQ_PHI)

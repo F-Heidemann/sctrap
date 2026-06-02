@@ -86,7 +86,7 @@ python scripts/quickstart_elliptical.py examples/parameters_vinante.py
 
 # Fuchs 2024: closed elliptical Ta cavity, composite (3 cubes + bead) magnet
 python scripts/quickstart_elliptical.py examples/parameters_fuchs.py
-# -> z-mode ~25.4 Hz  vs paper 26.7 Hz  (-5 %)
+# -> z-mode ~24.9 Hz  vs paper 26.7 Hz  (-7 %, 0.2 mm mesh)
 ```
 
 To run your own geometry, copy one of the example preset files, edit the
@@ -257,12 +257,27 @@ examples/
   z-mode ≈ 58.8 Hz vs paper 56.5 Hz (+4 %). A homogeneous sphere has an
   exactly point-dipole external field, so the point-dipole solver is
   physically exact here.
-- **Fuchs 2024 benchmark** — closed elliptical Ta cavity, 0.75 mm bar.
-  z-mode ≈ 25.4 Hz vs paper 26.7 Hz (−5 %), modelling the bar as a point
-  dipole. An independent FEniCSx solve confirms a point dipole and the
-  finite bar give the same z-mode here to within a few percent, so the
-  finite extent is *not* the limiting approximation for this geometry —
-  the earlier large discrepancy was the missing self-energy ½, now fixed.
+- **Fuchs 2024 benchmark** — closed elliptical Ta cavity, 0.75 mm bar, on a
+  0.2 mm mesh: z-mode ≈ 24.9 Hz vs paper 26.7 Hz (−7 %), with the bar settling
+  on the short (y) axis as predicted. The closed-form `analytic_box` benchmark
+  (printed by the quickstart) gives f_z 28.2 Hz independently. An FEniCSx solve
+  confirms a point dipole and the finite bar give the same z-mode here, so
+  finite extent is *not* the limiting approximation — the earlier large
+  discrepancy was the missing self-energy ½, now fixed.
+- **Mesh resolution & the noise floor (read before trusting frequencies).**
+  The point-dipole objective is non-smooth at ~1e-12 J (relative ~4e-5; the
+  nearest-facet image reflection jumps discretely with dipole position). Too
+  coarse a mesh lets this floor corrupt the normal-mode Hessian — at 0.3 mm the
+  Fuchs z-mode comes out a spurious 62 Hz with badly mixed mode shapes. **Use
+  ≥0.2 mm for publishable frequencies** (Fuchs 0.2 mm: z-mode 24.9 Hz, mode
+  shapes >95 % pure); treat 0.3 mm as a fast preview. Always cross-check the
+  FEM modes against the `analytic_box` estimate the quickstart prints — a large
+  disagreement means the mesh is too coarse, not that the physics is wrong.
+- **Equilibrium search** is seeded analytically (`analytic_box` z_eq) and stops
+  on an energy tolerance `fatol = ftol_rel·|U₀|` (`ftol_rel = 1e-4`, above the
+  noise floor). Fuchs converges in ~25 evaluations. Equilibrium position is
+  noise-limited to ~5–10 µm, which does not affect the frequencies (the Hessian
+  uses a symmetric stencil that cancels any residual gradient).
 - **Gravity** is included automatically via `gravity_potential`. For
   tilt studies pass a non-default `g_vec = gravity_from_tilt(angle, axis)`
   to `find_equilibrium` and `normal_modes`.
