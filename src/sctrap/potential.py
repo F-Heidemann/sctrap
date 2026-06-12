@@ -28,6 +28,119 @@ def U_mag(sctmesh: SCTrapMesh, m: np.ndarray, r0: np.ndarray, **kwargs) -> float
     return -0.5 * float(np.dot(np.asarray(m, dtype=float).reshape(3), Bind))
 
 
+def U_mag_and_grad(
+    sctmesh: SCTrapMesh,
+    m_mag: float,
+    theta: float,
+    phi: float,
+    r0: np.ndarray,
+    h_grad: float | None = None,
+    **kwargs,
+) -> tuple[float, np.ndarray]:
+    """Magnetic energy AND its full 5D gradient from a SINGLE solve.
+
+    Returns ``(U, g)`` with ``g = (dU/dx, dU/dy, dU/dz, dU/dtheta, dU/dphi)``
+    — magnetic part only (no gravity).
+
+    Physics: U(r0) = -1/2 m . B_ind(r0; r0) depends on r0 both through the
+    evaluation point and through the source position in the Neumann boundary
+    condition, so the force is NOT -1/2 grad_eval(m . B_ind). But the induced
+    field derives from a *symmetric* Green's function (reciprocity), so the
+    eval-point and source-point derivatives are equal and the factor 2 from
+    the product rule cancels the 1/2 exactly:
+
+        F      = + grad_r [ m . B_ind(r; r0) ] |_{r=r0}   (source FROZEN)
+        dU/dq  = - (dm/dq) . B_ind(r0)   for q in {theta, phi}
+
+    i.e. the classical "force/torque against the frozen image" result. Both
+    follow from the one solve already needed for U:
+
+    - the angular derivatives reuse B_ind(r0) directly;
+    - the spatial force needs grad_r(m . B_ind) = m_j dB_j/dx_i: the
+      analytic image part (when ``subtract_singularity=True``) is
+      differentiated in closed form, and the smooth FEM *residual* part is
+      differentiated by a short central difference over the exact
+      element-local gradients (`PhiSolution.grad`) with step ``h_grad`` —
+      this costs 6 extra gradient *interpolations*, not extra solves.
+      Because grad(P2) is piecewise linear, its FD spans a few elements and
+      acts as a local average of the piecewise-constant FEM Hessian.
+
+    Parameters
+    ----------
+    m_mag        : |m| [A m^2]; orientation given by (theta, phi)
+    theta, phi   : moment orientation [rad]
+    r0           : (3,) dipole position [m]
+    h_grad       : step for the residual-Hessian central difference [m];
+                   default = 0.125 x mean edge length of the tet containing
+                   r0 (capped at 0.7 x the distance to the nearest SC facet).
+                   Empirically the best match to the discrete energy's own
+                   FD gradient (0.4 % on the 0.2 mm Fuchs mesh, 0.05 % on
+                   the 0.3 mm Vinante mesh); larger steps average across
+                   elements and can bias the force by a few % on rough
+                   landscapes, smaller ones pick up piecewise-Hessian noise.
+    kwargs       : forwarded to `solve_phi` (element=, subtract_singularity=,
+                   ...). `B_source` is not supported here (point dipole only).
+    """
+    from .dipole import dipole_moment, dipole_moment_derivatives
+    from .half_space import grad_B_halfspace_image
+
+    if kwargs.get("B_source") is not None:
+        raise ValueError("U_mag_and_grad supports point dipoles only "
+                         "(B_source= is not allowed).")
+
+    r0 = np.asarray(r0, dtype=float).reshape(3)
+    m = dipole_moment(m_mag, theta, phi)
+
+    phi_sol = solve_phi(sctmesh, m, r0, **kwargs)
+    B = B_induced_at(phi_sol, r0)                  # total induced field
+    U = -0.5 * float(m @ B)
+
+    dm_dth, dm_dph = dipole_moment_derivatives(m_mag, theta, phi)
+    dU_dth = -float(dm_dth @ B)
+    dU_dph = -float(dm_dph @ B)
+
+    mesh = phi_sol.basis.mesh
+    if h_grad is None:
+        from .solver import _cached_element_finder
+        cell = _cached_element_finder(phi_sol.basis)(*r0.reshape(3, 1))[0]
+        verts = mesh.p[:, mesh.t[:, cell]]         # (3, 4)
+        edges = [np.linalg.norm(verts[:, a] - verts[:, b])
+                 for a in range(4) for b in range(a + 1, 4)]
+        h_grad = 0.125 * float(np.mean(edges))
+        # Keep the stencil inside the air domain: near the SC surface, cap
+        # the step at a fraction of the distance to the nearest SC facet.
+        sc_f = sctmesh.sc_facets
+        if sc_f is not None and len(sc_f) > 0:
+            cents = mesh.p[:, mesh.facets[:, sc_f]].mean(axis=1)  # (3, M)
+            d_sc = float(np.sqrt(((cents - r0[:, None]) ** 2).sum(axis=0).min()))
+            h_grad = min(h_grad, 0.7 * d_sc) if d_sc > 0 else h_grad
+
+    # D[i, j] = d B_res,j / d x_i by central differences of the exact
+    # element-local gradient (6 interpolations, no solves).
+    e = np.eye(3) * h_grad
+    pts = np.column_stack([r0 + e[0], r0 - e[0],
+                           r0 + e[1], r0 - e[1],
+                           r0 + e[2], r0 - e[2]])  # (3, 6)
+    Bres = phi_sol.grad(pts)                       # (3, 6)
+    D = np.empty((3, 3))
+    for i in range(3):
+        D[i, :] = (Bres[:, 2 * i] - Bres[:, 2 * i + 1]) / (2.0 * h_grad)
+
+    if phi_sol.image_source is not None:
+        m_src, r0_src, plane_pt, n_pl = phi_sol.image_source
+        D += grad_B_halfspace_image(
+            r0[None, :], m_src, r0_src, plane_pt, n_pl)[0]
+
+    # grad B is symmetric for a curl-free field; symmetrise away FD noise.
+    D = 0.5 * (D + D.T)
+    F = D @ m                                      # F_i = m_j dB_j/dx_i
+    g = np.empty(5)
+    g[:3] = -F
+    g[3] = dU_dth
+    g[4] = dU_dph
+    return U, g
+
+
 DEFAULT_GRAVITY = np.array([0.0, 0.0, -G_GRAV])
 
 

@@ -37,7 +37,7 @@ from typing import Tuple
 
 import numpy as np
 
-from .dipole import B_dipole
+from .dipole import B_dipole, grad_B_dipole
 from .mesh import SCTrapMesh
 
 
@@ -137,6 +137,26 @@ def B_halfspace_image(
                           np.asarray(plane_point, dtype=float).reshape(3), n)
     m_im  = reflect_moment(np.asarray(m, dtype=float).reshape(3), n)
     return B_dipole(points, m_im, r0_im)
+
+
+def grad_B_halfspace_image(
+    points: np.ndarray,
+    m: np.ndarray,
+    r0: np.ndarray,
+    plane_point: np.ndarray,
+    plane_normal: np.ndarray,
+) -> np.ndarray:
+    """Spatial gradient of `B_halfspace_image` w.r.t. the *field point*,
+    holding the image (i.e. the source position r0) frozen.
+
+    Returns (N, 3, 3) with G[n, i, j] = dB_j/dx_i [T/m].
+    """
+    n = np.asarray(plane_normal, dtype=float).reshape(3)
+    n = n / float(np.linalg.norm(n))
+    r0_im = reflect_point(np.asarray(r0,  dtype=float).reshape(3),
+                          np.asarray(plane_point, dtype=float).reshape(3), n)
+    m_im  = reflect_moment(np.asarray(m, dtype=float).reshape(3), n)
+    return grad_B_dipole(points, m_im, r0_im)
 
 
 # ---------------------------------------------------------------------------

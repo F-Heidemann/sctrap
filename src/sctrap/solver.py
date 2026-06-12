@@ -80,7 +80,7 @@ class PhiSolution:
         """
         pts = _as_3xN(points)
         basis = self.basis
-        cells = basis.mesh.element_finder(mapping=basis.mapping)(*pts)
+        cells = _cached_element_finder(basis)(*pts)
         X = basis.mapping.invF(pts[:, :, None], tind=cells)
         dofs = basis.element_dofs[:, cells]            # (Nbfun, M)
         g = np.zeros((3, pts.shape[1]))
@@ -102,6 +102,17 @@ def _as_3xN(points: np.ndarray) -> np.ndarray:
     elif pts.shape[0] != 3 and pts.shape[-1] == 3:
         pts = pts.T
     return np.ascontiguousarray(pts)
+
+
+def _cached_element_finder(basis: Basis):
+    """`mesh.element_finder` rebuilds a KD-tree on every call; cache one per
+    basis (the basis itself is cached per mesh in `_PreparedLaplace`, so this
+    amortises across all solves/evaluations on that mesh)."""
+    finder = getattr(basis, "_sctrap_element_finder", None)
+    if finder is None:
+        finder = basis.mesh.element_finder(mapping=basis.mapping)
+        basis._sctrap_element_finder = finder
+    return finder
 
 
 def _B_field_on_quadpts(x_array: np.ndarray, m: np.ndarray, r0: np.ndarray) -> np.ndarray:
@@ -206,6 +217,7 @@ def solve_phi(
     sc_intorder: int = 8,
     subtract_singularity: bool = False,
     B_source: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+    image_plane: Optional[tuple] = None,
 ) -> PhiSolution:
     """Solve Laplace's equation for the scalar potential Phi.
 
@@ -225,6 +237,17 @@ def solve_phi(
                   in the Neumann RHS — used for finite-size magnet geometries
                   whose analytic field is known (e.g. via magpylib).
                   Incompatible with `subtract_singularity=True`.
+    image_plane : optional `(plane_point, plane_normal)` overriding the
+                  nearest-SC-facet tangent plane used for singularity
+                  subtraction. The continuum split Phi = Phi_image +
+                  Phi_residual is exact for ANY plane (the image field is
+                  added and subtracted consistently); the choice only
+                  affects how smooth the residual RHS is. Freezing the
+                  plane across several solves makes U(r0) smooth in r0 —
+                  the per-call nearest-facet selection jumps discretely as
+                  r0 crosses facet-Voronoi boundaries (degenerate ON a
+                  symmetry axis), which creates artificial grooves in the
+                  energy landscape. Ignored unless `subtract_singularity`.
 
     Returns
     -------
@@ -247,7 +270,12 @@ def solve_phi(
 
     image_source = None
     if subtract_singularity:
-        plane_pt, plane_n, _ = find_nearest_sc_facet(sctmesh, r0_arr)
+        if image_plane is not None:
+            plane_pt = np.asarray(image_plane[0], dtype=float).reshape(3)
+            plane_n = np.asarray(image_plane[1], dtype=float).reshape(3)
+            plane_n = plane_n / float(np.linalg.norm(plane_n))
+        else:
+            plane_pt, plane_n, _ = find_nearest_sc_facet(sctmesh, r0_arr)
         image_source = (m_arr.copy(), r0_arr.copy(), plane_pt, plane_n)
 
     @LinearForm
