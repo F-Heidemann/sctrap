@@ -8,9 +8,11 @@ We solve
 using scikit-fem's quadratic Lagrange tetrahedral element.
 
 The induced field on the dipole equals B_ind(r0) = grad(Phi)(r0); we evaluate
-it via a centred finite difference of Phi (the P2 interpolant is C^0 across
-element faces, so direct gradient evaluation is element-local; FD on a small
-stencil away from boundaries is both cheap and free of element-face jumps).
+it element-locally: the P2 interpolant is a polynomial inside each
+tetrahedron, so after locating the containing element the gradient is
+computed exactly from the analytic basis-function gradients (no
+finite-difference step, hence no step-size dependence). The legacy centred
+finite-difference evaluation is kept behind ``method="fd"`` for comparison.
 """
 
 from __future__ import annotations
@@ -65,6 +67,28 @@ class PhiSolution:
         """Interpolate Phi at arbitrary points (3, M)."""
         pts = _as_3xN(points)
         return self.basis.interpolator(self.coeffs)(pts)
+
+    def grad(self, points: np.ndarray) -> np.ndarray:
+        """Evaluate grad(Phi) at arbitrary points; returns (3, M).
+
+        Element-local and exact: the P2 interpolant is a polynomial inside
+        each tetrahedron, so we locate the containing element, pull the
+        points back to reference coordinates, and contract the analytic
+        basis-function gradients with the element's DOF values. No
+        finite-difference step is involved (mirrors `CellBasis.probes`,
+        which does the same for function *values*).
+        """
+        pts = _as_3xN(points)
+        basis = self.basis
+        cells = basis.mesh.element_finder(mapping=basis.mapping)(*pts)
+        X = basis.mapping.invF(pts[:, :, None], tind=cells)
+        dofs = basis.element_dofs[:, cells]            # (Nbfun, M)
+        g = np.zeros((3, pts.shape[1]))
+        for k in range(basis.Nbfun):
+            # DiscreteField.grad has shape (3, M, 1): one ref point per cell.
+            dphi = basis.elem.gbasis(basis.mapping, X, k, tind=cells)[0].grad
+            g += dphi[:, :, 0] * self.coeffs[dofs[k]][None, :]
+        return g
 
 
 # ---------------------------------------------------------------------------
@@ -270,38 +294,49 @@ def B_induced_at(
     phi: PhiSolution,
     point: np.ndarray,
     h: Optional[float] = None,
+    method: str = "exact",
 ) -> np.ndarray:
-    """Evaluate B_induced = grad(Phi) at `point` via centred finite difference.
+    """Evaluate B_induced = grad(Phi) at `point`.
 
     Parameters
     ----------
-    phi   : PhiSolution from `solve_phi`
-    point : (3,) location at which to evaluate the induced field [m]
-    h     : finite-difference step [m]; default = 1e-4 * mesh diameter
-            (small enough for accuracy, large enough to avoid element-jump noise)
+    phi    : PhiSolution from `solve_phi`
+    point  : (3,) location at which to evaluate the induced field [m]
+    h      : finite-difference step [m] for ``method="fd"`` only;
+             default = 1e-4 * mesh diameter. Ignored for ``method="exact"``.
+    method : "exact" (default) evaluates the element-local P2 gradient
+             directly — no step-size dependence; "fd" is the legacy 6-point
+             centred finite difference, kept for cross-checking.
 
     Returns
     -------
     B_ind : (3,) numpy array [T]
     """
     p = np.asarray(point, dtype=float).reshape(3)
-    if h is None:
-        bbox = phi.basis.mesh.p
-        diam = float(np.linalg.norm(bbox.max(axis=1) - bbox.min(axis=1)))
-        h = max(1e-4 * diam, 1e-9)
 
-    e = np.eye(3) * h
-    pts = np.column_stack([
-        p + e[0], p - e[0],
-        p + e[1], p - e[1],
-        p + e[2], p - e[2],
-    ])  # (3, 6)
-    vals = phi(pts)                          # (6,)
-    g = np.array([
-        (vals[0] - vals[1]) / (2.0 * h),
-        (vals[2] - vals[3]) / (2.0 * h),
-        (vals[4] - vals[5]) / (2.0 * h),
-    ])
+    if method == "exact":
+        g = phi.grad(p)[:, 0]
+    elif method == "fd":
+        if h is None:
+            bbox = phi.basis.mesh.p
+            diam = float(np.linalg.norm(bbox.max(axis=1) - bbox.min(axis=1)))
+            h = max(1e-4 * diam, 1e-9)
+
+        e = np.eye(3) * h
+        pts = np.column_stack([
+            p + e[0], p - e[0],
+            p + e[1], p - e[1],
+            p + e[2], p - e[2],
+        ])  # (3, 6)
+        vals = phi(pts)                          # (6,)
+        g = np.array([
+            (vals[0] - vals[1]) / (2.0 * h),
+            (vals[2] - vals[3]) / (2.0 * h),
+            (vals[4] - vals[5]) / (2.0 * h),
+        ])
+    else:
+        raise ValueError(f"method must be 'exact' or 'fd', got {method!r}")
+
     # If the solve subtracted the singularity, Phi here represents only the
     # *residual* potential — add back the analytic image-dipole field at p.
     if phi.image_source is not None:
