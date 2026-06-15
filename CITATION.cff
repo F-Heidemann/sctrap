@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "sctrap: trap frequencies of magnetically levitated particles over arbitrary superconductor geometries"
+type: software
+authors:
+  - given-names: Francis
+    family-names: Headley
+    orcid: "https://orcid.org/0009-0000-7585-4957"
+    affiliation: "Institut für Theoretische Physik, Eberhard Karls Universität Tübingen, Tübingen, Germany"
+version: 0.1.0
+date-released: 2026-06-11
+license: MIT
+repository-code: "https://github.com/F-Heidemann/sctrap"
+url: "https://github.com/F-Heidemann/sctrap"
+# TODO: after you cut a tagged release and link the repo to Zenodo, paste the
+# minted DOI here (and add `identifiers:` if you want the versioned DOI too).
+# doi: "10.5281/zenodo.XXXXXXX"
+keywords:
+  - superconductor
+  - magnetic levitation
+  - magnetomechanics
+  - trap frequencies
+  - finite element method
+  - scikit-fem
+  - gmsh
+abstract: >-
+  sctrap computes the equilibrium position, levitation height and the five
+  trap frequencies (three translational, two librational) of a magnetic dipole
+  levitated above an arbitrary superconductor geometry, directly from a gmsh
+  mesh. It solves the magnetic-scalar-potential Laplace problem on the air
+  domain with a Meissner (Neumann) condition on the superconductor surface
+  using scikit-fem, in pure Python with no conda, MPI or PETSc dependency.
+  Results are validated against analytic image-dipole limits and against
+  published levitation experiments.
