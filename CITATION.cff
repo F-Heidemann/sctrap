@@ -12,9 +12,7 @@ date-released: 2026-06-11
 license: MIT
 repository-code: "https://github.com/F-Heidemann/sctrap"
 url: "https://github.com/F-Heidemann/sctrap"
-# TODO: after you cut a tagged release and link the repo to Zenodo, paste the
-# minted DOI here (and add `identifiers:` if you want the versioned DOI too).
-# doi: "10.5281/zenodo.XXXXXXX"
+doi: "10.5281/zenodo.20702434"
 keywords:
   - superconductor
   - magnetic levitation
